@@ -115,7 +115,7 @@ object Parsers {
         return out
     }
 
-    private val COMPONENT = Regex("^\\s*([A-Za-z][\\w.]*)/([\\w.$]+)\\s*$")
+    private val COMPONENT = Regex("^\\s*([A-Za-z][\\w.]*)/([\\w.\\$]+)\\s*$")
 
     /** Components printed one per line by `cmd package query-activities --brief` / `resolve-activity --brief`. */
     fun components(text: String): List<String> =
@@ -141,7 +141,7 @@ object Parsers {
         text.lineSequence().filter { it.contains('=') }.map { it.substringBefore('=') to it.substringAfter('=') }
             .filter { it.first.isNotBlank() }.toList()
 
-    private val PKG_HEADER = Regex("^\\s*Package \\[([^\\]]+)]")
+    private val PKG_HEADER = Regex("^\\s*Package \\[([^\\]]+)\\]")
     private val GRANTED = Regex("android\\.permission\\.([A-Z_]+): granted=true")
 
     /** Grep of `dumpsys package packages` (Package [..] headers + granted lines) -> pkg -> granted permission short names. */
@@ -192,7 +192,7 @@ object Parsers {
         return v.split(':').map { it.trim() }.filter { it.contains('/') }
     }
 
-    private val ADMIN = Regex("ComponentInfo\\{([^}]+)}")
+    private val ADMIN = Regex("ComponentInfo\\{([^\\}]+)\\}")
     fun deviceAdmins(text: String): List<String> = ADMIN.findAll(text).map { it.groupValues[1] }.distinct().toList()
 
     /** Output of a batch of commands separated by `echo @@<name>` markers. */

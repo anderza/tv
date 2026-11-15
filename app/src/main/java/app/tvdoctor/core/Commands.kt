@@ -11,7 +11,7 @@ object Commands {
     private val NS = setOf("global", "secure", "system")
     private fun ns(n: String): String { require(n in NS) { "Неизвестное пространство: $n" }; return n }
     private val OP_RE = Regex("^[A-Z_]+$")
-    private val COMP_RE = Regex("^[A-Za-z][\\w.]*/[\\w.$]+$")
+    private val COMP_RE = Regex("^[A-Za-z][\\w.]*/[\\w.\\$]+$")
 
     fun disable(p: String) = Cmd("pm disable-user --user 0 ${pkg(p)}", "pm enable --user 0 $p")
     fun enable(p: String) = Cmd("pm enable --user 0 ${pkg(p)}", "pm disable-user --user 0 $p")

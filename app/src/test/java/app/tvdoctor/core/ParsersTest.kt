@@ -116,6 +116,11 @@ class ParsersTest {
         assertNull(Parsers.appOp("No operations.", "CAMERA"))
     }
 
+    @Test fun deviceAdmins() {
+        val text = "  admin=ComponentInfo{com.foo/com.foo.Admin}\n    ComponentInfo{com.bar/.X}\n"
+        assertEquals(listOf("com.foo/com.foo.Admin", "com.bar/.X"), Parsers.deviceAdmins(text))
+    }
+
     @Test fun marked() {
         val m = Parsers.splitMarked("@@a\nline1\nline2\n@@b\n@@c\nx\n")
         assertEquals("line1\nline2", m["a"]!!.trim()); assertEquals("", m["b"]!!.trim()); assertEquals("x", m["c"]!!.trim())

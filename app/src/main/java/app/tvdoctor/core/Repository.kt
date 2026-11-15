@@ -105,7 +105,7 @@ class Repository(private val shell: Shell) {
         return packages
     }
 
-    private val PROP = Regex("^\\[([^\\]]+)]: \\[(.*)]$")
+    private val PROP = Regex("^\\[([^\\]]+)\\]: \\[(.*)\\]$")
     private fun props(text: String): Map<String, String> =
         text.lineSequence().mapNotNull { PROP.find(it.trim()) }.associate { it.groupValues[1] to it.groupValues[2] }
 

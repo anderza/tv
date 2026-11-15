@@ -22,6 +22,12 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Check regexes with ICU (Android's regex engine)
+        run: |
+          sudo apt-get install -y -qq libicu-dev >/dev/null
+          gcc tools/icu_regex_check.c -o icu_regex_check $(pkg-config --cflags --libs icu-i18n icu-uc)
+          python3 tools/check_regex.py app/src/main/java | ./icu_regex_check
+
       - name: Unit tests
         run: ./gradlew --no-daemon testDebugUnitTest
 

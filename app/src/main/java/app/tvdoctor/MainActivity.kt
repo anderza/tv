@@ -241,8 +241,13 @@ class MainActivity : Activity() {
     }
 
     fun showError(e: Throwable) {
-        val msg = ConnectScreen.explain(e)
-        AlertDialog.Builder(this).setTitle("Ошибка").setMessage(msg).setPositiveButton("OK", null).show()
+        val chain = generateSequence(e) { it.cause }.take(6).toList()
+        val main = ConnectScreen.explain(chain.firstOrNull { it is dadb.AdbException } ?: chain.last())
+        val details = chain.joinToString("\n← ") { "${it.javaClass.simpleName}: ${it.message ?: ""}" }
+        android.util.Log.e("TVDoctor", "error", e)
+        AlertDialog.Builder(this).setTitle("Ошибка")
+            .setMessage("$main\n\nПодробности (пришлите разработчику):\n$details")
+            .setPositiveButton("OK", null).show()
         if (!adb.isConnected && ::content.isInitialized) toast("Соединение с ТВ потеряно")
     }
 
