@@ -354,6 +354,15 @@ class MainActivity : Activity() {
     }
 
     fun openApp(pkg: String) = AppSheet(this, pkg).show()
+
+    private val apkInstaller by lazy { ApkInstaller(this) }
+    fun installApk() = if (adb.isConnected) apkInstaller.pick() else toast("Сначала подключитесь к телевизору")
+
+    @Deprecated("framework API")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        @Suppress("DEPRECATION") super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == ApkInstaller.REQUEST) apkInstaller.onResult(resultCode, data)
+    }
 }
 
 private class CrashLogger(private val file: java.io.File, private val next: Thread.UncaughtExceptionHandler?) : Thread.UncaughtExceptionHandler {

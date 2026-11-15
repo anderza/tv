@@ -9,6 +9,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
+import app.tvdoctor.IconCache
 import app.tvdoctor.MainActivity
 import app.tvdoctor.Screen
 import app.tvdoctor.core.Category
@@ -35,7 +36,8 @@ class AppsScreen(private val a: MainActivity) : Screen {
 
     override val view: View = vertical(a).apply {
         val top = vertical(context, 12)
-        top.input("Поиск по имени пакета", top = 0).addTextChangedListener(object : TextWatcher {
+        top.button("📲  Установить APK с телефона на ТВ", Kind.PRIMARY, top = 0) { a.installApk() }
+        top.input("Поиск по имени пакета", top = 8).addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) { query = s?.toString()?.trim().orEmpty(); rebuild() }
@@ -67,7 +69,7 @@ class AppsScreen(private val a: MainActivity) : Screen {
         val launcher = s.currentLauncher
         val q = query.lowercase()
         items = s.packages.values.filter { p ->
-            (q.isEmpty() || p.pkg.lowercase().contains(q)) && when (filter) {
+            (q.isEmpty() || p.pkg.lowercase().contains(q) || IconCache.label(p.pkg)?.lowercase()?.contains(q) == true) && when (filter) {
                 Filter.ALL -> p.installed
                 Filter.USER -> p.installed && !p.isSystem
                 Filter.SYSTEM -> p.installed && p.isSystem
@@ -80,7 +82,7 @@ class AppsScreen(private val a: MainActivity) : Screen {
             when (sort) {
                 Sort.MEM -> list.sortedWith(compareByDescending<PackageState> { s.memByPkg[it.pkg] ?: 0L }.thenBy { it.pkg })
                 Sort.SIZE -> list.sortedWith(compareByDescending<PackageState> { s.sizes[it.pkg]?.let { z -> z.codeBytes + z.dataBytes + z.cacheBytes } ?: 0L }.thenBy { it.pkg })
-                Sort.NAME -> list.sortedBy { it.pkg }
+                Sort.NAME -> list.sortedBy { (IconCache.label(it.pkg) ?: it.pkg).lowercase() }
             }
         }
         filterButtons.forEach { (f, b) ->
@@ -90,6 +92,7 @@ class AppsScreen(private val a: MainActivity) : Screen {
         sortButton.text = "Сортировка: ${sort.label}"
         countText.text = "Показано: ${items.size}"
         adapter.notifyDataSetChanged()
+        IconCache.load(a, s) { adapter.notifyDataSetChanged() }
     }
 
     private inner class Adapter : BaseAdapter() {
@@ -98,20 +101,32 @@ class AppsScreen(private val a: MainActivity) : Screen {
         override fun getItemId(position: Int) = position.toLong()
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
-            val row = (convertView as? LinearLayout) ?: vertical(a, 12).apply {
-                background = rounded(context, Pal.SURFACE, 12)
+            val row = (convertView as? LinearLayout) ?: LinearLayout(a).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
                 layoutParams = android.widget.AbsListView.LayoutParams(MATCH, WRAP)
-                hbox {
+                add(android.widget.ImageView(context).apply { tag = "icon"; scaleType = android.widget.ImageView.ScaleType.FIT_CENTER },
+                    w = context.dp(40), h = context.dp(40), end = 12)
+                val texts = vertical(context)
+                texts.hbox {
                     add(TextView(context).apply { textSize = 14.5f; setTextColor(Pal.TEXT); tag = "name" }, w = 0, weight = 1f)
                     add(TextView(context).apply { textSize = 11.5f; tag = "tag"; setPadding(context.dp(8), context.dp(2), context.dp(8), context.dp(2)) })
                 }
-                add(TextView(context).apply { textSize = 12.5f; setTextColor(Pal.SUB); tag = "info" }, top = 3)
+                texts.add(TextView(context).apply { textSize = 12.5f; setTextColor(Pal.SUB); tag = "info" }, top = 3)
+                add(texts, w = 0, weight = 1f)
             }
             val wrapper = row
             val p = items[position]
             val s = a.snapshot
-            (wrapper.findViewWithTag<TextView>("name")).text = p.pkg
+            val iconView = wrapper.findViewWithTag<android.widget.ImageView>("icon")
+            val icon = IconCache.icon(p.pkg)
+            iconView.visibility = if (p.isSystem) View.GONE else View.VISIBLE
+            if (icon != null) { iconView.setImageBitmap(icon); iconView.background = null }
+            else { iconView.setImageDrawable(null); iconView.background = rounded(a, Pal.SURFACE2, 10) }
+            val appLabel = IconCache.label(p.pkg)
+            (wrapper.findViewWithTag<TextView>("name")).text = appLabel ?: p.pkg
             val info = ArrayList<String>()
+            if (appLabel != null) info += p.pkg
             info += if (p.isSystem) "системное" else "установлено вами"
             if (!p.installed) info += "удалено для пользователя"
             else if (!p.enabled) info += "отключено"
@@ -131,7 +146,6 @@ class AppsScreen(private val a: MainActivity) : Screen {
             tagView.text = label
             tagView.setTextColor(color)
             tagView.background = if (label.isEmpty()) null else rounded(a, android.graphics.Color.argb(40, android.graphics.Color.red(color), android.graphics.Color.green(color), android.graphics.Color.blue(color)), 8)
-            wrapper.setPadding(a.dp(12), a.dp(10), a.dp(12), a.dp(10))
             return wrapperWithGap(wrapper)
         }
     }

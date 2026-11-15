@@ -21,7 +21,16 @@ class AppSheet(private val a: MainActivity, private val pkg: String) {
         fun run(fix: Fix) { dialog?.dismiss(); a.confirmAndApply(listOf(fix)) { a.screen(a.currentId())?.onShow() } }
 
         val col = vertical(a, 18)
-        col.text(pkg, 17f, bold = true)
+        val label = app.tvdoctor.IconCache.label(pkg)
+        col.hbox {
+            app.tvdoctor.IconCache.icon(pkg)?.let { bmp ->
+                add(android.widget.ImageView(context).apply { setImageBitmap(bmp) }, w = context.dp(48), h = context.dp(48), end = 12)
+            }
+            val names = vertical(context)
+            names.text(label ?: pkg, 17f, bold = true)
+            if (label != null) names.sub(pkg)
+            add(names, w = 0, weight = 1f)
+        }
         val facts = ArrayList<String>()
         if (st == null) facts += "Нет в списке пакетов (обновите скан)"
         else {

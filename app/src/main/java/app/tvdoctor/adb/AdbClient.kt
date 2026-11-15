@@ -4,6 +4,7 @@ import app.tvdoctor.core.Shell
 import app.tvdoctor.core.ShellResult
 import dadb.AdbKeyPair
 import dadb.Dadb
+import dadb.InstallResult
 import java.io.File
 import java.io.IOException
 
@@ -83,5 +84,25 @@ class AdbClient(private val keyDir: File) : Shell {
                 throw IOException("Связь с телевизором потеряна: ${e2.message ?: e2.javaClass.simpleName}", e2)
             }
         }
+    }
+
+    /**
+     * Installs APK files on the TV. One file = normal install; several files = one split-APK
+     * session (base.apk + config.*.apk). Returns null on success or the error text from the TV.
+     */
+    @Synchronized
+    fun install(apks: List<File>): String? {
+        val d = dadb ?: throw IOException("Нет подключения к телевизору")
+        val result = if (apks.size == 1) d.install(apks[0], "-r") else d.installMultiple(apks, "-r")
+        return when (result) {
+            is InstallResult.Success -> null
+            is InstallResult.Failure -> result.reason.trim().ifEmpty { "неизвестная ошибка" }
+        }
+    }
+
+    /** A second, independent ADB connection (same key) for slow background work like pulling APKs. */
+    fun openSecondary(): Dadb {
+        val h = host ?: throw IOException("Нет подключения к телевизору")
+        return Dadb.create(h, port, keyPair(), connectTimeout = 6_000, socketTimeout = 120_000, keepAlive = true)
     }
 }

@@ -46,6 +46,7 @@ class MoreScreen(private val a: MainActivity) : Screen {
 
         card {
             h2("Инструменты")
+            button("Установить APK с телефона на ТВ", Kind.PRIMARY, top = 8) { a.installApk() }
             button("Очистить кэш всех приложений", Kind.NORMAL, top = 8) { a.confirmAndApply(listOf(Fix("Очистить кэш всех приложений", listOf(Commands.trimCaches())))) }
             button("Вернуть все отключённые и удалённые приложения", Kind.NORMAL) { restoreAll() }
             button("Перезагрузить телевизор", Kind.DANGER) {
