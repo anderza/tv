@@ -1,0 +1,62 @@
+package app.tvdoctor.ui
+
+import android.app.AlertDialog
+import android.widget.ScrollView
+import app.tvdoctor.MainActivity
+import app.tvdoctor.core.Commands
+import app.tvdoctor.core.Fix
+import app.tvdoctor.core.KnownPackages
+import app.tvdoctor.core.Scanner
+
+/** Details and actions for one package. */
+class AppSheet(private val a: MainActivity, private val pkg: String) {
+
+    fun show() {
+        val s = a.snapshot
+        val st = s?.packages?.get(pkg)
+        val launcher = s?.currentLauncher
+        val known = KnownPackages.get(pkg)
+        val locked = KnownPackages.isProtected(pkg, launcher) && !a.expert
+        var dialog: AlertDialog? = null
+        fun run(fix: Fix) { dialog?.dismiss(); a.confirmAndApply(listOf(fix)) { a.screen(a.currentId())?.onShow() } }
+
+        val col = vertical(a, 18)
+        col.text(pkg, 17f, bold = true)
+        val facts = ArrayList<String>()
+        if (st == null) facts += "Нет в списке пакетов (обновите скан)"
+        else {
+            facts += if (st.isSystem) "Системное приложение" else "Установлено пользователем"
+            facts += when { !st.installed -> "Удалено для пользователя (можно восстановить)"; !st.enabled -> "Отключено"; else -> "Включено" }
+        }
+        s?.memByPkg?.get(pkg)?.let { facts += "В памяти: ${Scanner.mb(it)}" }
+        s?.cpuByPkg?.get(pkg)?.let { facts += "Процессор: ${"%.1f".format(it)}%" }
+        s?.sizes?.get(pkg)?.let { facts += "APK ${Scanner.bytes(it.codeBytes)} · данные ${Scanner.bytes(it.dataBytes)} · кэш ${Scanner.bytes(it.cacheBytes)}" }
+        if (st?.apkPath?.isNotEmpty() == true) facts += st.apkPath
+        col.sub(facts.joinToString("\n"), top = 6)
+        known?.let { col.text("${it.category.label}: ${it.note}", 14f, if (it.safe) Pal.GREEN else Pal.ORANGE, top = 10) }
+        if (known == null && KnownPackages.heuristic(pkg)) col.text("Имя похоже на рекламный/следящий модуль — проверьте перед отключением.", 14f, Pal.ORANGE, top = 10)
+        if (pkg == launcher) col.text("Это текущий лаунчер (главный экран). Сначала выберите другой в «Настройки → Лаунчер».", 14f, Pal.ACCENT, top = 10)
+        if (locked) col.text("Важный системный компонент — изменения заблокированы, чтобы не сломать ТВ. Разблокировать: «Ещё → Экспертный режим».", 14f, Pal.SUB, top = 10)
+
+        col.button("Запустить", Kind.NORMAL, top = 14) { run(Fix("Запустить $pkg", listOf(Commands.launch(pkg)))) }
+        col.button("Остановить (force-stop)") { run(Fix("Остановить $pkg", listOf(Commands.forceStop(pkg)))) }
+        if (!locked) {
+            col.button("Запретить работу в фоне") { run(Fix("Ограничить фон: $pkg", listOf(Commands.forceStop(pkg), Commands.restrictBackground(pkg)))) }
+            if (st == null || st.installed) {
+                if (st?.enabled != false) col.button("Отключить", Kind.DANGER) { run(Fix("Отключить $pkg", listOf(Commands.disable(pkg)), dangerous = known?.safe != true)) }
+                else col.button("Включить обратно", Kind.PRIMARY) { run(Fix("Включить $pkg", listOf(Commands.enable(pkg)))) }
+                col.button("Очистить данные", Kind.DANGER) {
+                    run(Fix("Очистить данные $pkg", listOf(Commands.clearData(pkg)), dangerous = true, note = "Удалятся настройки и вход в аккаунт этого приложения. Отменить нельзя."))
+                }
+                col.button("Удалить для пользователя", Kind.DANGER) {
+                    run(Fix("Удалить для пользователя: $pkg", listOf(Commands.uninstallForUser(pkg)), dangerous = true,
+                        note = if (st?.isSystem == true) "Системное приложение остаётся в прошивке, его можно вернуть кнопкой «Восстановить» или из журнала."
+                        else "Приложение, установленное вами, вернуть можно только пока его APK есть в системе; надёжнее — переустановить из Google Play."))
+                }
+            } else {
+                col.button("Восстановить", Kind.PRIMARY) { run(Fix("Восстановить $pkg", listOf(Commands.restoreForUser(pkg)))) }
+            }
+        }
+        dialog = AlertDialog.Builder(a).setView(ScrollView(a).apply { addView(col) }).setNegativeButton("Закрыть", null).show()
+    }
+}
