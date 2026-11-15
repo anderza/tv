@@ -71,15 +71,15 @@ class AppsScreen(private val a: MainActivity) : Screen {
                 Filter.ALL -> p.installed
                 Filter.USER -> p.installed && !p.isSystem
                 Filter.SYSTEM -> p.installed && p.isSystem
-                Filter.RUNNING -> (s.memByPkg[p.pkg] ?: 0) > 0
+                Filter.RUNNING -> (s.memByPkg[p.pkg] ?: 0L) > 0L
                 Filter.SUSPECT -> p.installed && p.enabled && p.pkg != launcher &&
                     (KnownPackages.get(p.pkg)?.category.let { it == Category.ADS || it == Category.TELEMETRY || it == Category.BLOAT } || KnownPackages.heuristic(p.pkg))
                 Filter.OFF -> !p.enabled || !p.installed
             }
         }.let { list ->
             when (sort) {
-                Sort.MEM -> list.sortedWith(compareByDescending<PackageState> { s.memByPkg[it.pkg] ?: 0 }.thenBy { it.pkg })
-                Sort.SIZE -> list.sortedWith(compareByDescending<PackageState> { s.sizes[it.pkg]?.let { z -> z.codeBytes + z.dataBytes + z.cacheBytes } ?: 0 }.thenBy { it.pkg })
+                Sort.MEM -> list.sortedWith(compareByDescending<PackageState> { s.memByPkg[it.pkg] ?: 0L }.thenBy { it.pkg })
+                Sort.SIZE -> list.sortedWith(compareByDescending<PackageState> { s.sizes[it.pkg]?.let { z -> z.codeBytes + z.dataBytes + z.cacheBytes } ?: 0L }.thenBy { it.pkg })
                 Sort.NAME -> list.sortedBy { it.pkg }
             }
         }

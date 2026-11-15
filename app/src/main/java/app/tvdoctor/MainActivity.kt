@@ -86,6 +86,7 @@ class MainActivity : Activity() {
         window.statusBarColor = Pal.BG
         window.navigationBarColor = Pal.BG
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        installCrashLog()
         prefs = getSharedPreferences("tvdoctor", Context.MODE_PRIVATE)
         journal = Journal(java.io.File(filesDir, "journal.json"))
         adb = AppState.adb ?: AdbClient(filesDir).also { AppState.adb = it }
@@ -108,6 +109,27 @@ class MainActivity : Activity() {
         setContentView(root)
         if (adb.isConnected) showMain() else showConnect()
         root.addView(busy, FrameLayout.LayoutParams(MATCH, MATCH))
+        showPreviousCrash()
+    }
+
+    private val crashFile get() = java.io.File(filesDir, "last_crash.txt")
+
+    /** If the app ever crashes, keep the stack trace and show it on the next start so it can be reported. */
+    private fun installCrashLog() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        if (previous is CrashLogger) return
+        Thread.setDefaultUncaughtExceptionHandler(CrashLogger(java.io.File(filesDir, "last_crash.txt"), previous))
+    }
+
+    private fun showPreviousCrash() {
+        val f = crashFile
+        if (!f.exists()) return
+        val text = try { f.readText().take(4000) } catch (_: Exception) { "" }
+        f.delete()
+        if (text.isBlank()) return
+        AlertDialog.Builder(this).setTitle("Прошлый запуск завершился с ошибкой")
+            .setMessage("Пришлите этот текст разработчику:\n\n$text")
+            .setPositiveButton("OK", null).show()
     }
 
     // ---------- navigation ----------
@@ -188,6 +210,10 @@ class MainActivity : Activity() {
     }
 
     fun go(id: String) {
+        try { goUnsafe(id) } catch (e: Throwable) { showError(e) }
+    }
+
+    private fun goUnsafe(id: String) {
         current = id
         val s = screens.getOrPut(id) {
             when (id) {
@@ -235,7 +261,7 @@ class MainActivity : Activity() {
             main.post {
                 if (busyText != null) setBusy(null)
                 if (isFinishing || isDestroyed) return@post
-                result.fold(done) { e -> showError(e) }
+                try { result.fold(done) { e -> showError(e) } } catch (e: Throwable) { showError(e) }
             }
         }
     }
@@ -328,4 +354,15 @@ class MainActivity : Activity() {
     }
 
     fun openApp(pkg: String) = AppSheet(this, pkg).show()
+}
+
+private class CrashLogger(private val file: java.io.File, private val next: Thread.UncaughtExceptionHandler?) : Thread.UncaughtExceptionHandler {
+    override fun uncaughtException(t: Thread, e: Throwable) {
+        try {
+            val sw = java.io.StringWriter()
+            e.printStackTrace(java.io.PrintWriter(sw))
+            file.writeText("TV Doctor ${android.os.Build.MODEL} Android ${android.os.Build.VERSION.RELEASE}\n$sw")
+        } catch (_: Throwable) {}
+        next?.uncaughtException(t, e)
+    }
 }
