@@ -22,7 +22,8 @@ class AppsScreen(private val a: MainActivity) : Screen {
     private enum class Filter(val label: String) {
         ALL("Все"), USER("Мои"), SYSTEM("Системные"), RUNNING("В памяти"), SUSPECT("Реклама и лишнее"), OFF("Отключённые и удалённые")
     }
-    private enum class Sort(val label: String) { MEM("по памяти"), SIZE("по размеру"), NAME("по имени") }
+    // короткие подписи, чтобы кнопка сортировки была узкой
+    private enum class Sort(val label: String) { MEM("память"), SIZE("размер"), NAME("имя") }
 
     private var filter = Filter.ALL
     private var sort = Sort.MEM
@@ -34,21 +35,35 @@ class AppsScreen(private val a: MainActivity) : Screen {
     private val adapter = Adapter()
     private var renderedFor = -1L
 
+    /** Делает кнопку компактной: ниже и уже обычной. */
+    private fun compact(b: Button): Button = b.apply {
+        textSize = 12f
+        isAllCaps = false
+        minWidth = 0
+        minimumWidth = 0
+        minHeight = 0
+        minimumHeight = 0
+        includeFontPadding = false
+        setPadding(context.dp(10), context.dp(6), context.dp(10), context.dp(6))
+    }
+
     override val view: View = vertical(a).apply {
         val top = vertical(context, 12)
         top.button("📲  Установить APK с телефона на ТВ", Kind.PRIMARY, top = 0) { a.installApk() }
-        top.input("Поиск по имени пакета", top = 8).addTextChangedListener(object : TextWatcher {
+        top.input("Поиск по имени пакета", top = 6).addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) { query = s?.toString()?.trim().orEmpty(); rebuild() }
         })
-        top.hscroll(top = 8) {
-            Filter.values().forEach { f -> filterButtons[f] = button(f.label, Kind.NORMAL) { filter = f; rebuild() } }
+        top.hscroll(top = 6) {
+            Filter.values().forEach { f ->
+                filterButtons[f] = this@AppsScreen.compact(button(f.label, Kind.NORMAL) { filter = f; rebuild() })
+            }
         }
-        top.hbox(top = 6) {
-            countText = add(TextView(context).apply { textSize = 13f; setTextColor(Pal.SUB) }, w = 0, weight = 1f)
-            sortButton = button("", Kind.GHOST) { sort = Sort.values()[(sort.ordinal + 1) % Sort.values().size]; rebuild() }
-            button("Обновить", Kind.GHOST) { a.loadSnapshot { rebuild() } }
+        top.hbox(top = 4) {
+            countText = add(TextView(context).apply { textSize = 12f; setTextColor(Pal.SUB) }, w = 0, weight = 1f)
+            sortButton = this@AppsScreen.compact(button("", Kind.GHOST) { sort = Sort.values()[(sort.ordinal + 1) % Sort.values().size]; rebuild() })
+            this@AppsScreen.compact(button("Обновить", Kind.GHOST) { a.loadSnapshot { rebuild() } })
         }
         add(top)
         val list = ListView(context).apply {
@@ -88,8 +103,9 @@ class AppsScreen(private val a: MainActivity) : Screen {
         filterButtons.forEach { (f, b) ->
             b.background = rounded(a, if (f == filter) Pal.ACCENT_DARK else Pal.SURFACE2, 10, if (f == filter) Pal.ACCENT else null, 1)
             b.setTextColor(if (f == filter) Pal.ACCENT else Pal.TEXT)
+            compact(b)
         }
-        sortButton.text = "Сортировка: ${sort.label}"
+        sortButton.text = "↕ ${sort.label}"
         countText.text = "Показано: ${items.size}"
         adapter.notifyDataSetChanged()
         IconCache.load(a, s) { adapter.notifyDataSetChanged() }
