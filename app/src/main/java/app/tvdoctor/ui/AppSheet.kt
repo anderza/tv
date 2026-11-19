@@ -3,6 +3,7 @@ package app.tvdoctor.ui
 import android.app.AlertDialog
 import android.widget.ScrollView
 import app.tvdoctor.MainActivity
+import app.tvdoctor.core.Category
 import app.tvdoctor.core.Commands
 import app.tvdoctor.core.Fix
 import app.tvdoctor.core.KnownPackages
@@ -66,6 +67,44 @@ class AppSheet(private val a: MainActivity, private val pkg: String) {
                 col.button("Восстановить", Kind.PRIMARY) { run(Fix("Восстановить $pkg", listOf(Commands.restoreForUser(pkg)))) }
             }
         }
+
+        // ——— НОВОЕ 1: убрать рекламу и слежку на всём ТВ ———
+        val adPkgs = s?.packages?.values?.filter { p ->
+            p.installed && p.enabled && p.pkg != launcher && !KnownPackages.isProtected(p.pkg, launcher) &&
+                (KnownPackages.get(p.pkg)?.category.let { it == Category.ADS || it == Category.TELEMETRY } || KnownPackages.heuristic(p.pkg))
+        }?.map { it.pkg }?.distinct().orEmpty()
+
+        if (adPkgs.isNotEmpty()) {
+            col.button("🚫  Убрать рекламу на ТВ (${adPkgs.size})", Kind.PRIMARY, top = 14) {
+                val shown = adPkgs.take(6).joinToString(", ")
+                val tail = if (adPkgs.size > 6) " и ещё ${adPkgs.size - 6}" else ""
+                run(Fix("Убрать рекламу и слежку: ${adPkgs.size} пакетов",
+                    adPkgs.flatMap { listOf(Commands.forceStop(it), Commands.disable(it)) },
+                    dangerous = true,
+                    note = "Будут отключены рекламные и следящие модули: $shown$tail. Прошивка не меняется, всё возвращается из журнала или кнопкой «Вернуть все отключённые приложения»."))
+            }
+        } else {
+            col.sub("Известных рекламных модулей на ТВ не найдено.", top = 14)
+        }
+
+        // ——— НОВОЕ 2: покупки Google ———
+        val vending = "com.android.vending"
+        val vState = s?.packages?.get(vending)
+        val billingOn = vState == null || (vState.installed && vState.enabled)
+        if (billingOn) {
+            col.button("💳  Отключить покупки Google", Kind.DANGER, top = 10) {
+                run(Fix("Отключить покупки Google (Play Маркет)",
+                    listOf(Commands.forceStop(vending), Commands.disable(vending)),
+                    dangerous = true,
+                    note = "Все покупки внутри приложений идут через Google Play Маркет. Пока он отключён, случайно купить что-то не получится — в том числе детям в играх. Минус: приложения перестанут обновляться и сам Play Маркет не откроется. Вернуть можно кнопкой ниже или из журнала. Если кнопка не сработает — включите «Ещё → Экспертный режим»."))
+            }
+        } else {
+            col.button("💳  Вернуть покупки Google", Kind.PRIMARY, top = 10) {
+                val cmds = if (vState?.installed == false) listOf(Commands.restoreForUser(vending), Commands.enable(vending)) else listOf(Commands.enable(vending))
+                run(Fix("Вернуть покупки Google (Play Маркет)", cmds))
+            }
+        }
+
         dialog = AlertDialog.Builder(a).setView(ScrollView(a).apply { addView(col) }).setNegativeButton("Закрыть", null).show()
     }
 }
