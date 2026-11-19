@@ -5,19 +5,21 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.os.Handler
 import android.os.Looper
+import app.tvdoctor.core.PackageState
 import app.tvdoctor.core.Snapshot
 import java.io.File
 import java.util.concurrent.Executors
 
 /**
- * Icons and names for apps the user installed on the TV. The TV's shell cannot render icons, so we
- * pull each app's base.apk over a second ADB connection, let the phone's PackageManager read the
- * icon and label from it, and keep only a small PNG plus the name. Cached by APK path, so each
- * app is downloaded once (again only after it is updated on the TV).
+ * Icons and names for apps on the TV — теперь и для системных приложений тоже.
+ * Сначала пробуем взять иконку с самого телефона (мгновенно), иначе тянем base.apk
+ * по второму ADB-соединению. Кэш по пути APK: каждое приложение качается один раз.
  */
 object IconCache {
 
     private const val MAX_APK_BYTES = 250L * 1024 * 1024
+    /** Системные APK бывают огромными (Play Services, WebView) — такие не тянем. */
+    private const val MAX_SYSTEM_APK_BYTES = 60L * 1024 * 1024
     private val main = Handler(Looper.getMainLooper())
     private val exec = Executors.newSingleThreadExecutor()
     private val icons = HashMap<String, Bitmap>()
@@ -59,40 +61,70 @@ object IconCache {
         File(d, "index.tsv").writeText(source.entries.joinToString("\n") { (p, src) -> "$p\t$src\t${labels[p].orEmpty().replace('\t', ' ').replace('\n', ' ')}" })
     }
 
-    /** Starts fetching missing icons for user-installed apps; [onUpdate] runs on the main thread after each one. */
+    /** Тянет недостающие иконки: сначала «Мои», потом системные. [onUpdate] — в главном потоке. */
     fun load(a: MainActivity, s: Snapshot, onUpdate: () -> Unit) {
         init(a)
         if (running) return
         val todo = synchronized(this) {
-            s.packages.values.filter { !it.isSystem && it.installed && it.apkPath.endsWith(".apk") && source[it.pkg] != it.apkPath && it.pkg !in failed }
+            s.packages.values
+                .filter { it.installed && it.apkPath.endsWith(".apk") && source[it.pkg] != it.apkPath && it.pkg !in failed }
+                .sortedBy { it.isSystem }
         }
         if (todo.isEmpty()) return
         running = true
         val tmp = File(a.cacheDir, "iconpull").apply { mkdirs() }
         exec.execute {
+            var fresh = 0
             try {
-                a.adb.openSecondary().use { d ->
-                    for (p in todo) {
+                val pm = a.packageManager
+                val pending = ArrayList<PackageState>()
+                // 1) Быстрый путь: то же приложение установлено на телефоне — берём иконку локально.
+                for (p in todo) {
+                    var ok = false
+                    if (p.isSystem) {
                         try {
-                            val size = d.shell("stat -c %s '${p.apkPath}'").output.trim().toLongOrNull() ?: 0L
-                            if (size > MAX_APK_BYTES) { synchronized(this) { failed += p.pkg }; continue }
-                            val f = File(tmp, "${p.pkg}.apk")
-                            d.pull(f, p.apkPath)
-                            val pm = a.packageManager
-                            val info = pm.getPackageArchiveInfo(f.path, 0)
-                            val ai = info?.applicationInfo
-                            var bmp: Bitmap? = null
-                            var label: String? = null
-                            if (ai != null) {
-                                ai.sourceDir = f.path; ai.publicSourceDir = f.path
-                                label = try { ai.loadLabel(pm).toString() } catch (_: Exception) { null }
-                                bmp = try { render(ai.loadIcon(pm)) } catch (_: Exception) { null }
+                            val ai = pm.getApplicationInfo(p.pkg, 0)
+                            val label = try { ai.loadLabel(pm).toString() } catch (_: Exception) { null }
+                            val bmp = try { render(ai.loadIcon(pm)) } catch (_: Exception) { null }
+                            if (bmp != null) {
+                                store(p.pkg, p.apkPath, label, bmp)
+                                fresh++
+                                if (fresh % 8 == 0) main.post(onUpdate)
+                                ok = true
                             }
-                            f.delete()
-                            if (bmp == null && label == null) synchronized(this) { failed += p.pkg }
-                            else { store(p.pkg, p.apkPath, label, bmp); main.post(onUpdate) }
-                        } catch (_: Exception) {
-                            synchronized(this) { failed += p.pkg }
+                        } catch (_: Exception) { }
+                    }
+                    if (!ok) pending += p
+                }
+                // 2) Остальные — качаем APK с телевизора.
+                if (pending.isNotEmpty()) {
+                    a.adb.openSecondary().use { d ->
+                        for (p in pending) {
+                            try {
+                                val limit = if (p.isSystem) MAX_SYSTEM_APK_BYTES else MAX_APK_BYTES
+                                val size = d.shell("stat -c %s '${p.apkPath}'").output.trim().toLongOrNull() ?: 0L
+                                if (size > limit) { synchronized(this) { failed += p.pkg }; continue }
+                                val f = File(tmp, "${p.pkg}.apk")
+                                d.pull(f, p.apkPath)
+                                val info = pm.getPackageArchiveInfo(f.path, 0)
+                                val ai = info?.applicationInfo
+                                var bmp: Bitmap? = null
+                                var label: String? = null
+                                if (ai != null) {
+                                    ai.sourceDir = f.path; ai.publicSourceDir = f.path
+                                    label = try { ai.loadLabel(pm).toString() } catch (_: Exception) { null }
+                                    bmp = try { render(ai.loadIcon(pm)) } catch (_: Exception) { null }
+                                }
+                                f.delete()
+                                if (bmp == null && label == null) synchronized(this) { failed += p.pkg }
+                                else {
+                                    store(p.pkg, p.apkPath, label, bmp)
+                                    fresh++
+                                    if (fresh % 8 == 0) main.post(onUpdate)
+                                }
+                            } catch (_: Exception) {
+                                synchronized(this) { failed += p.pkg }
+                            }
                         }
                     }
                 }
@@ -101,6 +133,7 @@ object IconCache {
             } finally {
                 tmp.deleteRecursively()
                 running = false
+                main.post(onUpdate)
             }
         }
     }
