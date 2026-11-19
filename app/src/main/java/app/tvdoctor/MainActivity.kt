@@ -29,6 +29,7 @@ import app.tvdoctor.ui.ConnectScreen
 import app.tvdoctor.ui.MoreScreen
 import app.tvdoctor.ui.Pal
 import app.tvdoctor.ui.PrivacyScreen
+import app.tvdoctor.ui.RemoteScreen
 import app.tvdoctor.ui.ScanScreen
 import app.tvdoctor.ui.SettingsScreen
 import app.tvdoctor.ui.WRAP
@@ -184,9 +185,9 @@ class MainActivity : Activity() {
             setBackgroundColor(Pal.SURFACE)
         }
         navButtons.clear()
-        listOf("scan" to "Скан", "apps" to "Приложения", "privacy" to "Слежка", "settings" to "Настройки", "more" to "Ещё").forEach { (id, label) ->
+         listOf("scan" to "Скан", "apps" to "Прил.", "remote" to "Пульт", "privacy" to "Слежка", "settings" to "Настр.", "more" to "Ещё").forEach { (id, label) ->
             val b = Button(this).apply {
-                text = label; isAllCaps = false; textSize = 12.5f; stateListAnimator = null
+                text = label; isAllCaps = false; textSize = 11.5f; maxLines = 1; stateListAnimator = null
                 setPadding(0, dp(10), 0, dp(10)); minHeight = 0; minimumHeight = 0
                 setOnClickListener { go(id) }
             }
@@ -218,6 +219,7 @@ class MainActivity : Activity() {
         val s = screens.getOrPut(id) {
             when (id) {
                 "apps" -> AppsScreen(this)
+                "remote" -> RemoteScreen(this)
                 "privacy" -> PrivacyScreen(this)
                 "settings" -> SettingsScreen(this)
                 "more" -> MoreScreen(this)
